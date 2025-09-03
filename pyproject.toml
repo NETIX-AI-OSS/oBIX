@@ -16,7 +16,7 @@ classifiers = [
 dependencies = [
     "xmltodict==0.14.2",
     "requests==2.32.3",
-    "urllib3==2.2.3",
+    "urllib3==2.5.0",
     "pytz==2024.2",
     "iupdatable==0.3.1",
     "Events==0.5",
