@@ -1,6 +1,6 @@
-# [build-system]
-# requires = ["setuptools", "setuptools-scm"]
-# build-backend = "setuptools.build_meta"
+[build-system]
+requires = ["setuptools==82.0.1", "wheel==0.47.0"]
+build-backend = "setuptools.build_meta:__legacy__"
 
 [project]
 name = "oBIX"
