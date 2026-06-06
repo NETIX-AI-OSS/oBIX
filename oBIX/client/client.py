@@ -6,12 +6,11 @@ from requests.packages.urllib3.exceptions import InsecureRequestWarning
 import xml.etree.ElementTree as xmlElement
 import urllib3
 import xmltodict
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timedelta
 from events import Events
-from datetime import datetime
 from apscheduler.schedulers.background import BackgroundScheduler
 from iupdatable import File, Logger
-from oBIX.common import Util, Point
+from oBIX.common import Util
 from oBIX.common.data_type import DataType
 
 
@@ -24,12 +23,18 @@ class Client:
     __enable_proxy = False
     __enable_https = True
     __proxy_dict = None
-    __watch_id_list = []
     watch_changed_handler = Events()
-    # creat a scheduler to poll watch changes from server
-    __scheduler = BackgroundScheduler()
 
-    def __init__(self, host, user_name, password, port=443, https=True, enable_proxy=False, proxy_dict=None):
+    def __init__(
+        self,
+        host,
+        user_name,
+        password,
+        port=443,
+        https=True,
+        enable_proxy=False,
+        proxy_dict=None,
+    ):
         """
         init a oBIX client
         Args:
@@ -60,7 +65,19 @@ class Client:
         self.__enable_proxy = enable_proxy
         self.__proxy_dict = proxy_dict
 
-        self.__scheduler.add_job(self.__poll_watch_changes, 'interval', seconds=1, id="interval_poll")
+        # Per-instance watch state — must not be shared across instances
+        self.__watch_id_list = []
+        # Create a scheduler to poll watch changes from server
+        self.__scheduler = BackgroundScheduler()
+
+        self.__scheduler.add_job(
+            self.__poll_watch_changes, "interval", seconds=1, id="interval_poll"
+        )
+
+        # Disable SSL warnings once at initialisation rather than per-request
+        urllib3.disable_warnings()
+        requests.packages.urllib3.disable_warnings(InsecureRequestWarning)
+
         Logger.instance().config(log_file_full_path="oBIX.log")
 
     def __del__(self):
@@ -69,6 +86,59 @@ class Client:
             self.__scheduler.remove_all_jobs()
             if self.__scheduler.running:
                 self.__scheduler.shutdown()
+
+    # ------------------------------------------------------------------
+    # HTTP helpers — single place for proxy/non-proxy dispatch
+    # ------------------------------------------------------------------
+
+    def __do_get(self, url: str):
+        if self.__enable_proxy:
+            return requests.get(
+                url,
+                auth=(self.__user_name, self.__password),
+                proxies=self.__proxy_dict,
+                verify=False,
+            )
+        return requests.get(url, auth=(self.__user_name, self.__password), verify=False)
+
+    def __do_post(self, url: str, data):
+        if self.__enable_proxy:
+            return requests.post(
+                url,
+                auth=(self.__user_name, self.__password),
+                data=data,
+                proxies=self.__proxy_dict,
+                verify=False,
+            )
+        return requests.post(
+            url, auth=(self.__user_name, self.__password), data=data, verify=False
+        )
+
+    # ------------------------------------------------------------------
+    # XML parsing helpers — single place for the repeated parse pattern
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def __parse_xml_response(response_text: str) -> tuple:
+        """Parse an oBIX XML response into (root_dict, first_key)."""
+        xml_root = xmlElement.fromstring(response_text)
+        xml_root_str = xmlElement.tostring(xml_root, encoding="utf-8")
+        root_dict = xmltodict.parse(xml_root_str)
+        first_key = list(root_dict.keys())[0]
+        return root_dict, first_key
+
+    @staticmethod
+    def __check_xml_error(root_dict: dict, first_key: str, context: str = ""):
+        """Return the error display string if the response is an oBIX error, else None."""
+        if "err" in first_key:
+            error_msg = root_dict[first_key].get("@display", "unknown error")
+            Logger.instance().error("{0} Failed: {1}".format(context, error_msg))
+            return error_msg
+        return None
+
+    # ------------------------------------------------------------------
+    # Serialisation helpers
+    # ------------------------------------------------------------------
 
     def __serialize_one_data(self, value, data_type: DataType, parameter=None):
         try:
@@ -85,7 +155,9 @@ class Client:
                 result = '<enum range="{0}" val="{1}"/>'.format(parameter, str(value))
             elif data_type == DataType.abs_time:
                 # 2005-03-09T13:30:00Z
-                result = '<abstime val="{0}"/>'.format(value.strftime('%Y-%m-%dT%H:%M:%S%Z'))
+                result = '<abstime val="{0}"/>'.format(
+                    value.strftime("%Y-%m-%dT%H:%M:%S%Z")
+                )
             elif data_type == DataType.rel_time:
                 result = '<reltime val="{0}"/>'.format(str(value))
             elif data_type == DataType.href:
@@ -109,11 +181,12 @@ class Client:
 
     def __serialize_data(self, value, data_type: DataType, parameter=None):
         try:
-            result = ""
             if data_type == DataType.list:
                 if not isinstance(parameter, DataType):
-                    Logger.instance().error("The type of the current <value> is an [DataType.list]."
-                                        " Please use the <parameter> to specify the data type of the list element.")
+                    Logger.instance().error(
+                        "The type of the current <value> is an [DataType.list]."
+                        " Please use the <parameter> to specify the data type of the list element."
+                    )
                     return ""
                 type_str = Util.get_data_type_str(data_type)
                 result = '<list of="obix:{0}">\n'.format(type_str)
@@ -122,9 +195,7 @@ class Client:
                     result = result + "  " + element + "\n"
                 result = result + "</list>"
                 return result
-            else:
-                result = self.__serialize_one_data(value, data_type, parameter)
-            return result
+            return self.__serialize_one_data(value, data_type, parameter)
         except Exception as e:
             Logger.instance().error(e)
             Logger.instance().error(traceback.format_exc())
@@ -145,19 +216,17 @@ class Client:
 
     def read_point(self, point_path: str):
         try:
-            urllib3.disable_warnings()
-            requests.packages.urllib3.disable_warnings(InsecureRequestWarning)
             url = self.__get_url(point_path)
-            if self.__enable_proxy:
-                response = requests.get(url, auth=(self.__user_name, self.__password), proxies=self.__proxy_dict,
-                                        verify=False)
-            else:
-                response = requests.get(url, auth=(self.__user_name, self.__password), verify=False)
+            response = self.__do_get(url)
             if response.status_code == 200:
                 xml_root = xmlElement.fromstring(response.text)
                 # check err
                 if "err" in xml_root.tag and "display" in xml_root.attrib:
-                    Logger.instance().error("[{} read_point Error]: {}".format(point_path, xml_root.attrib["display"]))
+                    Logger.instance().error(
+                        "[{} read_point Error]: {}".format(
+                            point_path, xml_root.attrib["display"]
+                        )
+                    )
                     return None
                 xml_root_str = xmlElement.tostring(xml_root, encoding="utf-8")
                 point_dict = xmltodict.parse(xml_root_str)
@@ -189,140 +258,161 @@ class Client:
     def read_point_value(self, point_path: str):
         return self.read_point_slot(point_path=point_path, slot_name="out")
 
-    def set_point_value(self, point_path: str, value, data_type: DataType, parameter=None):
+    def set_point_value(
+        self, point_path: str, value, data_type: DataType, parameter=None
+    ):
         return self.__operate_point(point_path, "set", value, data_type, parameter)
 
     def set_point_auto(self, point_path: str, data_type: DataType, parameter=None):
         return self.__operate_point(point_path, "auto", "0", data_type, parameter)
 
-    def set_point_custom(self, point_path: str, slot:str, value, data_type: DataType, parameter=None):
+    def set_point_custom(
+        self, point_path: str, slot: str, value, data_type: DataType, parameter=None
+    ):
         return self.__operate_point(point_path, slot, value, data_type, parameter)
 
+    def override_point(
+        self, point_path: str, value, data_type: DataType, time_delta: timedelta = None
+    ):
+        """Override a point value with an optional duration.
 
-    def override_point(self, point_path: str, value, data_type: DataType, time_delta: timedelta = None):
+        Merges the previous ``override_point`` (with value) and
+        ``override_point_command`` (command-only) behaviours into a single
+        method.  Pass ``value=None`` and omit ``data_type`` to issue a
+        command-only override (equivalent to the old override_point_command).
+        """
         try:
             url = self.__get_url(point_path, "override")
-            urllib3.disable_warnings()
             post_data = dict()
             post_data["obj"] = dict()
             post_data["obj"]["reltime"] = dict()
             post_data["obj"]["reltime"]["@name"] = "duration"
             if time_delta:
-                post_data["obj"]["reltime"]["@val"] = "PT{0}S".format(time_delta.seconds)
+                post_data["obj"]["reltime"]["@val"] = "PT{0}S".format(
+                    time_delta.seconds
+                )
             else:
                 post_data["obj"]["reltime"]["@val"] = "PT0S"
-            type_str = Util.get_data_type_str(data_type)
-            post_data["obj"][type_str] = dict()
-            post_data["obj"][type_str]["@name"] = "value"
-            post_data["obj"][type_str]["@val"] = str(value)
+            if value is not None and data_type is not None:
+                type_str = Util.get_data_type_str(data_type)
+                post_data["obj"][type_str] = dict()
+                post_data["obj"][type_str]["@name"] = "value"
+                post_data["obj"][type_str]["@val"] = str(value)
             post_data_str = xmltodict.unparse(post_data, full_document=False)
             if not post_data_str:
-                Logger.instance().error("Override Point Failed: POST Data serialization failed!")
+                Logger.instance().error(
+                    "Override Point Failed: POST Data serialization failed!"
+                )
                 return False
-            print(post_data_str)
-            if self.__enable_proxy:
-                response = requests.post(url, auth=(self.__user_name, self.__password), data=post_data_str,
-                                         proxies=self.__proxy_dict, verify=False)
-            else:
-                response = requests.post(url, auth=(self.__user_name, self.__password), data=post_data_str, verify=False)
+            Logger.instance().debug(
+                "override_point POST data: {0}".format(post_data_str)
+            )
+            response = self.__do_post(url, post_data_str)
             if response.status_code == 200:
-                xml_root = xmlElement.fromstring(response.text)
-                xml_root_str = xmlElement.tostring(xml_root, encoding="utf-8")
-                root = xmltodict.parse(xml_root_str)
-                first_key = list(root.keys())[0]
-                if "err" in first_key:
-                    error_msg = root[first_key]["@display"]
-                    Logger.instance().error("Override Point Failed: {0}".format(error_msg))
-                    return error_msg
-                else:
-                    return "OK"
+                root_dict, first_key = self.__parse_xml_response(response.text)
+                error = self.__check_xml_error(root_dict, first_key, "Override Point")
+                if error is not None:
+                    return error
+                return "OK"
             else:
-                Logger.instance().error("Override Point Failed: Response StatusCode is {0}".format(response.status_code))
+                Logger.instance().error(
+                    "Override Point Failed: Response StatusCode is {0}".format(
+                        response.status_code
+                    )
+                )
                 return False
         except Exception as e:
-            Logger.instance().error("Override Point Failed: Trigger exception！")
+            Logger.instance().error("Override Point Failed: Trigger exception!")
             Logger.instance().error(e)
             Logger.instance().error(traceback.format_exc())
             return False
 
-    def override_point_command(self, point_path: str, slot:str, time_delta: timedelta = None):
+    def override_point_command(
+        self, point_path: str, slot: str, time_delta: timedelta = None
+    ):
+        """Issue a command-only override (no value payload) to a named slot."""
         try:
             url = self.__get_url(point_path, slot)
-            urllib3.disable_warnings()
             post_data = dict()
             post_data["obj"] = dict()
             post_data["obj"]["reltime"] = dict()
             post_data["obj"]["reltime"]["@name"] = "duration"
             if time_delta:
-                post_data["obj"]["reltime"]["@val"] = "PT{0}S".format(time_delta.seconds)
+                post_data["obj"]["reltime"]["@val"] = "PT{0}S".format(
+                    time_delta.seconds
+                )
             else:
                 post_data["obj"]["reltime"]["@val"] = "PT0S"
             post_data_str = xmltodict.unparse(post_data, full_document=False)
-            print(post_data_str)
             if not post_data_str:
-                Logger.instance().error("Override Point Failed: POST Data serialization failed!")
+                Logger.instance().error(
+                    "Override Point Failed: POST Data serialization failed!"
+                )
                 return False
-            if self.__enable_proxy:
-                response = requests.post(url, auth=(self.__user_name, self.__password), data=post_data_str,
-                                         proxies=self.__proxy_dict, verify=False)
-            else:
-                response = requests.post(url, auth=(self.__user_name, self.__password), data=post_data_str, verify=False)
+            Logger.instance().debug(
+                "override_point_command POST data: {0}".format(post_data_str)
+            )
+            response = self.__do_post(url, post_data_str)
             if response.status_code == 200:
-                xml_root = xmlElement.fromstring(response.text)
-                xml_root_str = xmlElement.tostring(xml_root, encoding="utf-8")
-                root = xmltodict.parse(xml_root_str)
-                first_key = list(root.keys())[0]
-                if "err" in first_key:
-                    error_msg = root[first_key]["@display"]
-                    Logger.instance().error("Override Point Failed: {0}".format(error_msg))
-                    return error_msg
-                else:
-                    return "OK"
+                root_dict, first_key = self.__parse_xml_response(response.text)
+                error = self.__check_xml_error(root_dict, first_key, "Override Point")
+                if error is not None:
+                    return error
+                return "OK"
             else:
-                Logger.instance().error("Override Point Failed: Response StatusCode is {0}".format(response.status_code))
+                Logger.instance().error(
+                    "Override Point Failed: Response StatusCode is {0}".format(
+                        response.status_code
+                    )
+                )
                 return False
         except Exception as e:
-            Logger.instance().error("Override Point Failed: Trigger exception！")
+            Logger.instance().error("Override Point Failed: Trigger exception!")
             Logger.instance().error(e)
             Logger.instance().error(traceback.format_exc())
             return False
 
+    def emergency_override_point(
+        self, point_path: str, value, data_type: DataType, parameter=None
+    ):
+        return self.__operate_point(
+            point_path, "emergencyOverride", value, data_type, parameter
+        )
 
-    def emergency_override_point(self, point_path: str, value, data_type: DataType, parameter=None):
-        return self.__operate_point(point_path, "emergencyOverride", value, data_type, parameter)
+    def set_point_emergency_auto(
+        self, point_path: str, data_type: DataType, parameter=None
+    ):
+        return self.__operate_point(
+            point_path, "emergencyAuto", "0", data_type, parameter
+        )
 
-    def set_point_emergency_auto(self, point_path: str, data_type: DataType, parameter=None):
-        return self.__operate_point(point_path, "emergencyAuto", "0", data_type, parameter)
-
-    def __operate_point(self, url_path: str, operation: str, value, data_type: DataType, parameter=None):
+    def __operate_point(
+        self, url_path: str, operation: str, value, data_type: DataType, parameter=None
+    ):
         try:
             url = self.__get_url(url_path, operation)
-            urllib3.disable_warnings()
             post_data = self.__serialize_data(value, data_type, parameter)
             if not post_data:
-                Logger.instance().error("Operate Point Failed: POST Data serialization failed!")
+                Logger.instance().error(
+                    "Operate Point Failed: POST Data serialization failed!"
+                )
                 return False
-            if self.__enable_proxy:
-                response = requests.post(url, auth=(self.__user_name, self.__password), data=post_data,
-                                         proxies=self.__proxy_dict, verify=False)
-            else:
-                response = requests.post(url, auth=(self.__user_name, self.__password), data=post_data, verify=False)
+            response = self.__do_post(url, post_data)
             if response.status_code == 200:
-                xml_root = xmlElement.fromstring(response.text)
-                xml_root_str = xmlElement.tostring(xml_root, encoding="utf-8")
-                root = xmltodict.parse(xml_root_str)
-                first_key = list(root.keys())[0]
-                if "err" in first_key:
-                    error_msg = root[first_key]["@display"]
-                    Logger.instance().error("Operate Point Failed: {0}".format(error_msg))
-                    return error_msg
-                else:
-                    return "OK"
+                root_dict, first_key = self.__parse_xml_response(response.text)
+                error = self.__check_xml_error(root_dict, first_key, "Operate Point")
+                if error is not None:
+                    return error
+                return "OK"
             else:
-                Logger.instance().error("Operate Point Failed: Response StatusCode is {0}".format(response.status_code))
+                Logger.instance().error(
+                    "Operate Point Failed: Response StatusCode is {0}".format(
+                        response.status_code
+                    )
+                )
                 return False
         except Exception as e:
-            Logger.instance().error("Operate Point Failed: Trigger exception！")
+            Logger.instance().error("Operate Point Failed: Trigger exception!")
             Logger.instance().error(e)
             Logger.instance().error(traceback.format_exc())
             return False
@@ -330,29 +420,41 @@ class Client:
     def write_point(self, url: str, value, data_type: DataType, parameter=None):
         return self.set_point_value(url, value, data_type, parameter)
 
-    def read_history(self, station, point, start_time: datetime, end_time: datetime = None, limit=None):
+    def read_history(
+        self,
+        station,
+        point,
+        start_time: datetime,
+        end_time: datetime = None,
+        limit=None,
+    ):
         try:
-            urllib3.disable_warnings()
-            start_time_str = start_time.strftime("%Y-%m-%dT%H:%M:%S.000%Z").replace("UTC", "")
+            start_time_str = start_time.strftime("%Y-%m-%dT%H:%M:%S.000%Z").replace(
+                "UTC", ""
+            )
             if end_time is None:
                 end_time_str = ""
             else:
-                end_time_str = end_time.strftime("%Y-%m-%dT%H:%M:%S.000%Z").replace("UTC", "")
+                end_time_str = end_time.strftime("%Y-%m-%dT%H:%M:%S.000%Z").replace(
+                    "UTC", ""
+                )
             if isinstance(limit, int) and limit > 0:
-                url = "{0}/obix/histories/{1}/{2}/~historyQuery?start={3}&limit={4}"\
-                    .format(self.__host_url, station, point, start_time_str, limit)
+                url = "{0}/obix/histories/{1}/{2}/~historyQuery?start={3}&limit={4}".format(
+                    self.__host_url, station, point, start_time_str, limit
+                )
             else:
-                url = "{0}/obix/histories/{1}/{2}/~historyQuery?start={3}&end={4}" \
-                    .format(self.__host_url, station, point, start_time_str, end_time_str)
-            if self.__enable_proxy:
-                response = requests.get(url, auth=(self.__user_name, self.__password), proxies=self.__proxy_dict,
-                                        verify=False)
-            else:
-                response = requests.get(url, auth=(self.__user_name, self.__password), verify=False)
+                url = (
+                    "{0}/obix/histories/{1}/{2}/~historyQuery?start={3}&end={4}".format(
+                        self.__host_url, station, point, start_time_str, end_time_str
+                    )
+                )
+            response = self.__do_get(url)
             if response.status_code == 200:
                 root = xmltodict.parse(response.text)
                 if "err" in list(root.keys()):
-                    Logger.instance().error("{0} {1}".format(root["err"]["@is"], root["err"]["@display"]))
+                    Logger.instance().error(
+                        "{0} {1}".format(root["err"]["@is"], root["err"]["@display"])
+                    )
                     return None
                 temp_list = root["obj"]["list"]
                 if "obj" not in temp_list:
@@ -363,11 +465,17 @@ class Client:
                     one = dict()
                     for key in list(data.keys()):
                         if key == "abstime":
-                            one["timeStamp"] = datetime.strptime(str(data[key]["@val"]), "%Y-%m-%dT%H:%M:%S.%f%z")
+                            one["timeStamp"] = datetime.strptime(
+                                str(data[key]["@val"]), "%Y-%m-%dT%H:%M:%S.%f%z"
+                            )
                         elif key == "real":
                             one["value"] = float(data[key]["@val"])
                         elif key == "bool":
-                            one["value"] = True if str(data[key]["@val"]).lower() == "true" else False
+                            one["value"] = (
+                                True
+                                if str(data[key]["@val"]).lower() == "true"
+                                else False
+                            )
                         elif key == "int":
                             one["value"] = int(data[key]["@val"])
                         else:
@@ -375,20 +483,14 @@ class Client:
                     result.append(one)
                 return result
             else:
-                Logger.instance().error("response status code is {0}".format(response.status_code))
+                Logger.instance().error(
+                    "response status code is {0}".format(response.status_code)
+                )
                 return None
         except Exception as e:
             Logger.instance().error(e)
             Logger.instance().error(traceback.format_exc())
             return None
-
-    @staticmethod
-    def __filter_property(src: dict, property_name: str):
-        for key in src.keys():
-            if "@name" in src[key]:
-                if src[key]["@name"] == property_name:
-                    return src[key]
-        return None
 
     @staticmethod
     def __format_one_dict(src, type_name: str):
@@ -426,14 +528,16 @@ class Client:
 
     def read_alarms(self, start_time: datetime, end_time: datetime = None, limit=None):
         try:
-            urllib3.disable_warnings()
-
-            url = "{0}/obix/config/Services/AlarmService/~alarmQuery/".format(self.__host_url)
+            url = "{0}/obix/config/Services/AlarmService/~alarmQuery/".format(
+                self.__host_url
+            )
             post_data = dict()
             post_data["obj"] = dict()
             post_data["obj"]["@is"] = "obix:AlarmFilter"
 
-            start_time_str = start_time.strftime("%Y-%m-%dT%H:%M:%S.000%Z").replace("UTC", "")
+            start_time_str = start_time.strftime("%Y-%m-%dT%H:%M:%S.000%Z").replace(
+                "UTC", ""
+            )
             post_data["obj"]["abstime"] = []
             post_data["obj"]["abstime"].append(dict())
             post_data["obj"]["abstime"][0]["@name"] = "start"
@@ -441,7 +545,9 @@ class Client:
             if end_time is None:
                 end_time_str = ""
             else:
-                end_time_str = end_time.strftime("%Y-%m-%dT%H:%M:%S.000%Z").replace("UTC", "")
+                end_time_str = end_time.strftime("%Y-%m-%dT%H:%M:%S.000%Z").replace(
+                    "UTC", ""
+                )
                 post_data["obj"]["abstime"].append(dict())
                 post_data["obj"]["abstime"][1]["@name"] = "end"
                 post_data["obj"]["abstime"][1]["@val"] = end_time_str
@@ -451,11 +557,7 @@ class Client:
                 post_data["obj"]["int"]["@val"] = limit
 
             post_data_str = xmltodict.unparse(post_data, full_document=False)
-            if self.__enable_proxy:
-                response = requests.post(url, auth=(self.__user_name, self.__password), data=post_data_str,
-                                         proxies=self.__proxy_dict, verify=False)
-            else:
-                response = requests.post(url, auth=(self.__user_name, self.__password), data=post_data_str, verify=False)
+            response = self.__do_post(url, post_data_str)
             if response.status_code == 200:
                 root = xmltodict.parse(response.text)
                 temp_list = root["obj"]["list"]
@@ -484,7 +586,9 @@ class Client:
                     result.append(one)
                 return result
             else:
-                Logger.instance().error("response status code is {0}".format(response.status_code))
+                Logger.instance().error(
+                    "response status code is {0}".format(response.status_code)
+                )
                 return None
         except Exception as e:
             Logger.instance().error(e)
@@ -493,7 +597,6 @@ class Client:
 
     def create_new_watch(self):
         try:
-            urllib3.disable_warnings()
             url_watch_service = "{0}/obix/watchService".format(self.__host_url)
             url = url_watch_service + "/make/"
             post_data = dict()
@@ -505,11 +608,7 @@ class Client:
             post_data["obj"]["op"]["@out"] = "obix:Watch"
 
             post_data_str = xmltodict.unparse(post_data, full_document=False)
-            if self.__enable_proxy:
-                response = requests.post(url, auth=(self.__user_name, self.__password), data=post_data_str,
-                                         proxies=self.__proxy_dict, verify=False)
-            else:
-                response = requests.post(url, auth=(self.__user_name, self.__password), data=post_data_str, verify=False)
+            response = self.__do_post(url, post_data_str)
             if response.status_code == 200:
                 root = xmltodict.parse(response.text)
                 watch_url = str(root["obj"]["@href"])
@@ -518,7 +617,9 @@ class Client:
                     self.__watch_id_list.append(watch_id)
                 return watch_id
             else:
-                Logger.instance().error("response status code is {0}".format(response.status_code))
+                Logger.instance().error(
+                    "response status code is {0}".format(response.status_code)
+                )
                 return None
         except Exception as e:
             Logger.instance().error(e)
@@ -557,7 +658,9 @@ class Client:
         """
         return self.__operate_watch_points("remove", point_path_list, watch_id)
 
-    def __operate_watch_points(self, operation: str, point_path_list: [str], watch_id=""):
+    def __operate_watch_points(
+        self, operation: str, point_path_list: [str], watch_id=""
+    ):
         """
         Remove objects from watch
         Args:
@@ -573,7 +676,6 @@ class Client:
 
         """
         try:
-            urllib3.disable_warnings()
             if watch_id == "":
                 if len(self.__watch_id_list) == 0:
                     watch_id = self.create_new_watch()
@@ -592,17 +694,16 @@ class Client:
                 if point_path[-1] != "/":
                     point_path = point_path + "/"
                 if point_path[0] == "/":
-                    post_data["obj"]["list"]["uri"][index]["@val"] = "/obix" + point_path
+                    post_data["obj"]["list"]["uri"][index]["@val"] = (
+                        "/obix" + point_path
+                    )
                 else:
-                    post_data["obj"]["list"]["uri"][index]["@val"] = "/obix/" + point_path
+                    post_data["obj"]["list"]["uri"][index]["@val"] = (
+                        "/obix/" + point_path
+                    )
 
             post_data_str = xmltodict.unparse(post_data, full_document=False)
-            if self.__enable_proxy:
-                response = requests.post(url, auth=(self.__user_name, self.__password), data=post_data_str,
-                                         proxies=self.__proxy_dict, verify=False)
-            else:
-                response = requests.post(url, auth=(self.__user_name, self.__password), data=post_data_str,
-                                         verify=False)
+            response = self.__do_post(url, post_data_str)
             if response.status_code == 200:
                 root = xmltodict.parse(response.text)
                 if "<err" in response.text:
@@ -612,7 +713,9 @@ class Client:
                 else:
                     return root
             else:
-                Logger.instance().error("response status code is {0}".format(response.status_code))
+                Logger.instance().error(
+                    "response status code is {0}".format(response.status_code)
+                )
                 return None
         except Exception as e:
             Logger.instance().error(e)
@@ -660,28 +763,18 @@ class Client:
             self.__scheduler.start()
 
     def stop_watch(self):
-        if not self.__scheduler.running:
+        if self.__scheduler.running:
             self.__scheduler.shutdown()
 
     def __get_one_folder_sub_nodes(self, full_url=""):
         result = []
         try:
-            urllib3.disable_warnings()
-            requests.packages.urllib3.disable_warnings(InsecureRequestWarning)
-
             url = self.__host_url + "/obix/config/"
             if full_url:
                 url = full_url
-            if self.__enable_proxy:
-                response = requests.get(url, auth=(self.__user_name, self.__password), proxies=self.__proxy_dict,
-                                        verify=False)
-            else:
-                response = requests.get(url, auth=(self.__user_name, self.__password), verify=False)
+            response = self.__do_get(url)
             if response.status_code == 200:
-                xml_root = xmlElement.fromstring(response.text)
-                xml_root_str = xmlElement.tostring(xml_root, encoding="utf-8")
-                root_dict = xmltodict.parse(xml_root_str)
-                first_key = list(root_dict.keys())[0]
+                root_dict, first_key = self.__parse_xml_response(response.text)
                 obj_dict = root_dict[first_key]
                 ref_key = next((x for x in list(obj_dict.keys()) if ":ref" in x), None)
                 if ref_key is None:
@@ -693,21 +786,25 @@ class Client:
                     if "@is" in sub_node:
                         is_content = str(sub_node["@is"])
                         if "baja:Folder" in is_content:
-                            result.append({
-                                "name": sub_node["@name"],
-                                "href": sub_node["@href"],
-                                "enable": True,
-                                "type": "Folder",
-                                "subNodes": []
-                            })
+                            result.append(
+                                {
+                                    "name": sub_node["@name"],
+                                    "href": sub_node["@href"],
+                                    "enable": True,
+                                    "type": "Folder",
+                                    "subNodes": [],
+                                }
+                            )
                         elif "baja:Station" in is_content:
-                            result.append({
-                                "name": sub_node["@name"],
-                                "href": sub_node["@href"],
-                                "enable": True,
-                                "type": "Station",
-                                "subNodes": []
-                            })
+                            result.append(
+                                {
+                                    "name": sub_node["@name"],
+                                    "href": sub_node["@href"],
+                                    "enable": True,
+                                    "type": "Station",
+                                    "subNodes": [],
+                                }
+                            )
                         elif "obix:Point" in is_content:
                             data_type = ""
                             enable = True
@@ -721,13 +818,15 @@ class Client:
                                 data_type = "enum"
                             else:
                                 enable = False
-                            result.append({
-                                "name": sub_node["@name"],
-                                "href": sub_node["@href"],
-                                "enable": enable,
-                                "dataType": data_type,
-                                "type": "Point"
-                            })
+                            result.append(
+                                {
+                                    "name": sub_node["@name"],
+                                    "href": sub_node["@href"],
+                                    "enable": enable,
+                                    "dataType": data_type,
+                                    "type": "Point",
+                                }
+                            )
                 return result
             else:
                 return None
@@ -761,7 +860,9 @@ class Client:
                     new_url = self.__host_url + node["href"]
                 else:
                     new_url = parents_url + node["href"]
-                result.extend(self.__recursive_search(parents_url=new_url, nodes=node["subNodes"]))
+                result.extend(
+                    self.__recursive_search(parents_url=new_url, nodes=node["subNodes"])
+                )
             elif node["type"] == "Point":
                 if node["href"][0] == "/":
                     node["href"] = self.__host_url + node["href"]
@@ -770,7 +871,9 @@ class Client:
                 result.append(node)
         return result
 
-    def export_points(self, folder_path="", export_file_name="all_points.json", export_type=0):
+    def export_points(
+        self, folder_path="", export_file_name="all_points.json", export_type=0
+    ):
         """
         Export the information of all points in the specified directory
         Args:
@@ -813,4 +916,3 @@ class Client:
             Logger.instance().error(traceback.format_exc())
             Logger.instance().error(e)
             return None
-
