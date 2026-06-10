@@ -13,4 +13,3 @@ class DataType(IntEnum):
     time = 9
     list = 10
     href = 11
-

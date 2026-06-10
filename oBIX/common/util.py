@@ -3,45 +3,29 @@ import traceback
 from oBIX.common import Point, DataType
 from iupdatable import Logger
 
+# Single source-of-truth mapping: string tag -> DataType
+_STR_TO_DATA_TYPE: dict = {
+    "real": DataType.real,
+    "bool": DataType.bool,
+    "int": DataType.int,
+    "str": DataType.str,
+    "enum": DataType.enum,
+    "abstime": DataType.abs_time,
+    "reltime": DataType.rel_time,
+}
+
+# Reverse mapping: DataType -> string tag (derived automatically)
+_DATA_TYPE_TO_STR: dict = {v: k for k, v in _STR_TO_DATA_TYPE.items()}
+
 
 class Util(object):
-
     @staticmethod
     def parse_data_type(data_type_str: str):
-        data_type_str = data_type_str.lower()
-        if data_type_str == "real":
-            return DataType.real
-        elif data_type_str == "bool":
-            return DataType.bool
-        elif data_type_str == "int":
-            return DataType.int
-        elif data_type_str == "str":
-            return DataType.str
-        elif data_type_str == "enum":
-            return DataType.enum
-        else:
-            return DataType.str
+        return _STR_TO_DATA_TYPE.get(data_type_str.lower(), DataType.str)
 
     @staticmethod
     def get_data_type_str(data_type: DataType):
-        type_str = ""
-        if data_type == DataType.bool:
-            type_str = "bool"
-        elif data_type == DataType.int:
-            type_str = "int"
-        elif data_type == DataType.real:
-            type_str = "real"
-        elif data_type == DataType.str:
-            type_str = "str"
-        elif data_type == DataType.enum:
-            type_str = "enum"
-        elif data_type == DataType.abs_time:
-            type_str = "abstime"
-        elif data_type == DataType.rel_time:
-            type_str = "reltime"
-        else:
-            type_str = "str"
-        return type_str
+        return _DATA_TYPE_TO_STR.get(data_type, "str")
 
     @staticmethod
     def convert_to_type(str_value: str, data_type: DataType):
@@ -67,7 +51,6 @@ class Util(object):
             data_type_str = data_type_str.lower()
             point = Point()
             point.val = point_dict["@val"]
-            # point.status = point_dict["@status"]
             point.href = point_dict["@href"]
             point.display = point_dict["@display"]
             point.name = str(point_dict["@href"]).split("/")[-2]
