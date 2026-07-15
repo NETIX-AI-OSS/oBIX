@@ -43,3 +43,7 @@ dev = [
 
 # ... other project metadata fields as specified in:
 #     https://packaging.python.org/en/latest/specifications/declaring-project-metadata/
+
+[tool.pyright]
+venvPath = "."
+venv = ".venv"
