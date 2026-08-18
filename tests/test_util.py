@@ -104,11 +104,7 @@ class TestParsePoint:
     """Util.parse_point: dict -> Point."""
 
     def _make_real_point_dict(self):
-        """Return a minimal real-valued point dict as produced by xmltodict.
-
-        The @is attribute mirrors what oBIX servers actually return: a
-        space-separated list that includes 'obix:Point'.
-        """
+        """Return a minimal real-valued point dict shaped like an oBIX xmltodict payload (@is includes 'obix:Point')."""
         slots = [
             {"@name": "out", "@display": "42.0", "@val": "42.0"},
             {"@name": "in1", "@display": "{null}", "@val": "null"},
