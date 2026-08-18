@@ -7,9 +7,7 @@ from unittest.mock import patch, MagicMock, PropertyMock
 from oBIX.common.data_type import DataType
 
 
-# ---------------------------------------------------------------------------
 # Helpers / fixtures
-# ---------------------------------------------------------------------------
 
 def _make_response(status_code: int, text: str) -> MagicMock:
     resp = MagicMock()
@@ -56,9 +54,7 @@ def client():
         yield c
 
 
-# ---------------------------------------------------------------------------
 # __get_url
-# ---------------------------------------------------------------------------
 
 class TestGetUrl:
     def test_basic_path(self, client):
@@ -78,9 +74,7 @@ class TestGetUrl:
         assert url == "https://127.0.0.1/obix/config/test/set"
 
 
-# ---------------------------------------------------------------------------
 # read_point
-# ---------------------------------------------------------------------------
 
 class TestReadPoint:
     def test_returns_point_on_200(self, client):
@@ -105,9 +99,7 @@ class TestReadPoint:
         assert result is None
 
 
-# ---------------------------------------------------------------------------
 # read_point_value / read_point_slot
-# ---------------------------------------------------------------------------
 
 class TestReadPointValue:
     def test_returns_float_for_real_point(self, client):
@@ -121,9 +113,7 @@ class TestReadPointValue:
         assert value is None
 
 
-# ---------------------------------------------------------------------------
 # __parse_xml_response (static helper)
-# ---------------------------------------------------------------------------
 
 class TestParseXmlResponse:
     def test_returns_dict_and_first_key(self):
@@ -138,9 +128,7 @@ class TestParseXmlResponse:
         assert "err" in first_key
 
 
-# ---------------------------------------------------------------------------
 # __check_xml_error (static helper)
-# ---------------------------------------------------------------------------
 
 class TestCheckXmlError:
     def test_returns_none_for_ok_response(self):
@@ -158,9 +146,7 @@ class TestCheckXmlError:
         assert result == "No such object: /bad/path/"
 
 
-# ---------------------------------------------------------------------------
 # override_point
-# ---------------------------------------------------------------------------
 
 class TestOverridePoint:
     def test_returns_ok_on_success(self, client):
@@ -195,9 +181,7 @@ class TestOverridePoint:
         assert "val=" not in post_data or "PT0S" in post_data
 
 
-# ---------------------------------------------------------------------------
 # override_point_command
-# ---------------------------------------------------------------------------
 
 class TestOverridePointCommand:
     def test_returns_ok_on_success(self, client):
@@ -211,9 +195,7 @@ class TestOverridePointCommand:
         assert result is False
 
 
-# ---------------------------------------------------------------------------
 # set_point_value / set_point_auto
-# ---------------------------------------------------------------------------
 
 class TestSetPointValue:
     def test_set_point_value_ok(self, client):
@@ -227,9 +209,7 @@ class TestSetPointValue:
         assert result == "OK"
 
 
-# ---------------------------------------------------------------------------
 # create_new_watch
-# ---------------------------------------------------------------------------
 
 
 class TestCreateNewWatch:
@@ -255,9 +235,7 @@ class TestCreateNewWatch:
         assert result is None
 
 
-# ---------------------------------------------------------------------------
 # start_watch / stop_watch
-# ---------------------------------------------------------------------------
 
 class TestStartStopWatch:
     def test_start_watch_calls_start_when_not_running(self, client):
@@ -281,9 +259,7 @@ class TestStartStopWatch:
         client._Client__scheduler.shutdown.assert_not_called()
 
 
-# ---------------------------------------------------------------------------
 # Instance isolation — __watch_id_list must not be shared
-# ---------------------------------------------------------------------------
 
 class TestInstanceIsolation:
     def test_separate_watch_id_lists(self):
@@ -299,9 +275,7 @@ class TestInstanceIsolation:
         assert "watch_a" not in c2._Client__watch_id_list
 
 
-# ---------------------------------------------------------------------------
 # __serialize_data
-# ---------------------------------------------------------------------------
 
 class TestSerializeData:
     def test_real_serialisation(self, client):

@@ -87,9 +87,7 @@ class Client:
             if self.__scheduler.running:
                 self.__scheduler.shutdown()
 
-    # ------------------------------------------------------------------
     # HTTP helpers — single place for proxy/non-proxy dispatch
-    # ------------------------------------------------------------------
 
     def __do_get(self, url: str):
         if self.__enable_proxy:
@@ -114,9 +112,7 @@ class Client:
             url, auth=(self.__user_name, self.__password), data=data, verify=False
         )
 
-    # ------------------------------------------------------------------
     # XML parsing helpers — single place for the repeated parse pattern
-    # ------------------------------------------------------------------
 
     @staticmethod
     def __parse_xml_response(response_text: str) -> tuple:
@@ -136,9 +132,7 @@ class Client:
             return error_msg
         return None
 
-    # ------------------------------------------------------------------
     # Serialisation helpers
-    # ------------------------------------------------------------------
 
     def __serialize_one_data(self, value, data_type: DataType, parameter=None):
         try:

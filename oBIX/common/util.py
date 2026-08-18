@@ -65,8 +65,7 @@ class Util(object):
                 value_str = None
                 if "@display" not in slot:
                     continue
-                # @display is null but val has value
-                # In this case, the final value is treated as None.
+                # If @display is null but val has a value, treat it as None
                 if "{null}" not in slot["@display"]:
                     value_str = slot["@val"]
                 setattr(point, name, value_str)
