@@ -35,18 +35,7 @@ class Client:
         enable_proxy=False,
         proxy_dict=None,
     ):
-        """
-        init a oBIX client
-        Args:
-            host: PC IP, E.g: 127.0.0.1
-            user_name: user name
-            password: password
-            port: [Optional] the ip port to access
-            https: [Optional] whether enable `https`, default is True
-            enable_proxy: [Optional] whether to use a proxy server, default is False
-            proxy_dict: [Optional] if `enable_proxy` is enabled, this parameter is required.
-                E.g: proxy_dict = {'http': 'http://127.0.0.1:8888', "https": "https://127.0.0.1:8888"}
-        """
+        """If enable_proxy is True, proxy_dict must be like {'http': ..., 'https': ...}."""
         self.__host = str(host).strip()
         self.__user_name = str(user_name).strip()
         self.__password = str(password).strip()
@@ -81,7 +70,6 @@ class Client:
         Logger.instance().config(log_file_full_path="oBIX.log")
 
     def __del__(self):
-        # clear jobs and shutdown scheduler
         if self.__scheduler is not None:
             self.__scheduler.remove_all_jobs()
             if self.__scheduler.running:
@@ -131,8 +119,6 @@ class Client:
             Logger.instance().error("{0} Failed: {1}".format(context, error_msg))
             return error_msg
         return None
-
-    # Serialisation helpers
 
     def __serialize_one_data(self, value, data_type: DataType, parameter=None):
         try:
@@ -214,7 +200,6 @@ class Client:
             response = self.__do_get(url)
             if response.status_code == 200:
                 xml_root = xmlElement.fromstring(response.text)
-                # check err
                 if "err" in xml_root.tag and "display" in xml_root.attrib:
                     Logger.instance().error(
                         "[{} read_point Error]: {}".format(
@@ -268,13 +253,7 @@ class Client:
     def override_point(
         self, point_path: str, value, data_type: DataType, time_delta: timedelta = None
     ):
-        """Override a point value with an optional duration.
-
-        Merges the previous ``override_point`` (with value) and
-        ``override_point_command`` (command-only) behaviours into a single
-        method.  Pass ``value=None`` and omit ``data_type`` to issue a
-        command-only override (equivalent to the old override_point_command).
-        """
+        """Override a point value with an optional duration; pass value=None to issue a command-only override."""
         try:
             url = self.__get_url(point_path, "override")
             post_data = dict()
@@ -621,54 +600,17 @@ class Client:
             return None
 
     def add_watch_points(self, point_path_list: [str], watch_id=""):
-        """
-        Add new objects to watch
-        Args:
-            point_path_list: a list of URIs
-                            Examples
-                                ["/config/examples/BooleanWritable/", "/config/examples/NumericWritable/"]
-            watch_id: the watch identity, default is ""
-                        if watch_id is empty string, it will use a default watch (if not exist, will create first)
-                      Examples
-                        "watch84"
-        Returns:
-
-        """
+        """Add points to a watch; an empty watch_id uses (or creates) the default watch."""
         return self.__operate_watch_points("add", point_path_list, watch_id)
 
     def remove_watch_points(self, point_path_list: [str], watch_id=""):
-        """
-        Remove objects from watch
-        Args:
-            point_path_list: a list of URIs
-                            Examples
-                                ["/config/examples/BooleanWritable/", "/config/examples/NumericWritable/"]
-            watch_id: the watch identity, default is ""
-                        if watch_id is empty string, it will use a default watch (if not exist, will create first)
-                      Examples
-                        "watch84"
-        Returns:
-
-        """
+        """Remove points from a watch; an empty watch_id uses (or creates) the default watch."""
         return self.__operate_watch_points("remove", point_path_list, watch_id)
 
     def __operate_watch_points(
         self, operation: str, point_path_list: [str], watch_id=""
     ):
-        """
-        Remove objects from watch
-        Args:
-            operation: "add" or "remove" or "pollChanges"
-            point_path_list: a list of URIs
-                            Examples
-                                ["/config/examples/BooleanWritable/", "/config/examples/NumericWritable/"]
-            watch_id: the watch identity, default is ""
-                        if watch_id is empty string, it will use a default watch (if not exist, will create first)
-                      Examples
-                        "watch84"
-        Returns:
-
-        """
+        """Dispatch a watch operation (add/remove/pollChanges/pollRefresh); an empty watch_id uses (or creates) the default watch."""
         try:
             if watch_id == "":
                 if len(self.__watch_id_list) == 0:
@@ -868,19 +810,7 @@ class Client:
     def export_points(
         self, folder_path="", export_file_name="all_points.json", export_type=0
     ):
-        """
-        Export the information of all points in the specified directory
-        Args:
-            folder_path: The directory you want to export. E.g: "/config/xxx/"
-                All data points will be exported by default.
-            export_file_name: The file path to save the result, default is "all_points.json"
-            export_type: The output style, the default is 0
-                0: JSON format, Nested way and preserve directory structure
-                1: JSON format, pure point list with properties, ignoring directory structure
-                2: string list, pure point url list
-        Returns: According to the parameter `export_type` setting, return different forms points information
-        If there is no point in the current directory or an exception occurs, it returns None
-        """
+        """Export points under folder_path to a file; export_type selects nested JSON (0), flat JSON (1), or a URL list (2)."""
         try:
             url = self.__host_url + "/obix/"
             if folder_path:
