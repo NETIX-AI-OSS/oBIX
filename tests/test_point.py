@@ -1,6 +1,7 @@
 """Tests for oBIX.common.point — Point model and serialisation."""
+
 import json
-import pytest
+
 from oBIX.common.point import Point
 from oBIX.common.data_type import DataType
 
