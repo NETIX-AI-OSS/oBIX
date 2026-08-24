@@ -1,5 +1,5 @@
 """Tests for oBIX.common.data_type — enum stability."""
-import pytest
+
 from oBIX.common.data_type import DataType
 
 

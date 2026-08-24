@@ -2,11 +2,11 @@
 
 A client package for interacting with oBIX(Open Building Information Exchange)
 
-中文版教程请访问：[使用 Python 通过 oBIX 协议访问 Niagara 数据](https://www.cnblogs.com/IUpdatable/p/14052867.html)
+For a tutorial on accessing Niagara data through the oBIX protocol with Python, see [this guide](https://www.cnblogs.com/IUpdatable/p/14052867.html).
 
 ## 0. Installation
 
-* make sure Python version >= 3.7
+* make sure Python version >= 3.13
 
 ```bash
 pip install oBIX

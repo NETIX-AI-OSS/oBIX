@@ -1,8 +1,7 @@
 """Tests for oBIX.client.client — Client public methods (mocked HTTP)."""
-import json
 import pytest
 from datetime import timedelta
-from unittest.mock import patch, MagicMock, PropertyMock
+from unittest.mock import patch, MagicMock
 
 from oBIX.common.data_type import DataType
 
@@ -38,7 +37,7 @@ def client():
     """Return a Client instance with scheduler and logger mocked out."""
     with patch("oBIX.client.client.BackgroundScheduler") as mock_sched_cls, \
          patch("oBIX.client.client.Logger") as mock_logger, \
-         patch("oBIX.client.client.urllib3") as mock_urllib3, \
+         patch("oBIX.client.client.urllib3"), \
          patch("oBIX.client.client.requests") as mock_requests:
 
         mock_sched = MagicMock()
