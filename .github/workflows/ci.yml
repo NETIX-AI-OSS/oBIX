@@ -18,7 +18,7 @@ concurrency:
 jobs:
   test:
     name: Test (Python ${{ matrix.python-version }})
-    runs-on: build-only
+    runs-on: self-hosted
     strategy:
       fail-fast: false
       matrix:
@@ -55,7 +55,7 @@ jobs:
 
   build:
     name: Build package
-    runs-on: build-only
+    runs-on: self-hosted
     steps:
       - name: Check out repository
         uses: actions/checkout@v6
