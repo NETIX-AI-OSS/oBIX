@@ -26,6 +26,11 @@ dependencies = [
 
 dynamic = ["version"]
 
+[tool.ruff.lint]
+# N999: package name oBIX is the OBIX standard spelling; BLE001: broad
+# excepts are deliberate in this client library (network/parse resilience).
+ignore = ["N999", "BLE001"]
+
 [tool.setuptools.dynamic]
 version = {attr = "oBIX.__version__.__version__"}
 

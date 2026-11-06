@@ -2,8 +2,8 @@
 
 import json
 
-from oBIX.common.point import Point
 from oBIX.common.data_type import DataType
+from oBIX.common.point import Point
 
 
 class TestPointToJson:

@@ -1,7 +1,9 @@
 """Tests for oBIX.client.client — Client public methods (mocked HTTP)."""
-import pytest
+
 from datetime import timedelta
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
+
+import pytest
 
 from oBIX.common.data_type import DataType
 
@@ -29,23 +31,27 @@ ERR_XML = """<err is="obix:BadUriErr" display="No such object: /bad/path/"/>"""
 OK_XML = """<obj href="/obix/watchService/watch1/" is="obix:Watch"/>"""
 
 # Watch response includes full URL so the watch-ID extraction logic works correctly
-WATCH_RESPONSE_XML = """<obj href="https://127.0.0.1/obix/watchService/watch1/" is="obix:Watch"/>"""
+WATCH_RESPONSE_XML = (
+    """<obj href="https://127.0.0.1/obix/watchService/watch1/" is="obix:Watch"/>"""
+)
 
 
 @pytest.fixture()
 def client():
     """Return a Client instance with scheduler and logger mocked out."""
-    with patch("oBIX.client.client.BackgroundScheduler") as mock_sched_cls, \
-         patch("oBIX.client.client.Logger") as mock_logger, \
-         patch("oBIX.client.client.urllib3"), \
-         patch("oBIX.client.client.requests") as mock_requests:
-
+    with (
+        patch("oBIX.client.client.BackgroundScheduler") as mock_sched_cls,
+        patch("oBIX.client.client.Logger") as mock_logger,
+        patch("oBIX.client.client.urllib3"),
+        patch("oBIX.client.client.requests") as mock_requests,
+    ):
         mock_sched = MagicMock()
         mock_sched.running = False
         mock_sched_cls.return_value = mock_sched
         mock_logger.instance.return_value = MagicMock()
 
         from oBIX.client.client import Client
+
         c = Client("127.0.0.1", "admin", "password", port=443)
         c._Client__requests = mock_requests  # expose for per-test overrides
         yield c
@@ -71,35 +77,47 @@ class TestGetUrl:
 
 class TestReadPoint:
     def test_returns_point_on_200(self, client):
-        with patch.object(client, "_Client__do_get", return_value=_make_response(200, REAL_POINT_XML)):
+        with patch.object(
+            client, "_Client__do_get", return_value=_make_response(200, REAL_POINT_XML)
+        ):
             point = client.read_point("/config/station/p/")
         assert point is not None
         assert point.data_type == DataType.real
 
     def test_returns_none_on_non_200(self, client):
-        with patch.object(client, "_Client__do_get", return_value=_make_response(404, "")):
+        with patch.object(
+            client, "_Client__do_get", return_value=_make_response(404, "")
+        ):
             result = client.read_point("/bad/path/")
         assert result is None
 
     def test_returns_none_on_err_tag(self, client):
-        with patch.object(client, "_Client__do_get", return_value=_make_response(200, ERR_XML)):
+        with patch.object(
+            client, "_Client__do_get", return_value=_make_response(200, ERR_XML)
+        ):
             result = client.read_point("/bad/path/")
         assert result is None
 
     def test_returns_none_on_exception(self, client):
-        with patch.object(client, "_Client__do_get", side_effect=Exception("network error")):
+        with patch.object(
+            client, "_Client__do_get", side_effect=Exception("network error")
+        ):
             result = client.read_point("/config/station/p/")
         assert result is None
 
 
 class TestReadPointValue:
     def test_returns_float_for_real_point(self, client):
-        with patch.object(client, "_Client__do_get", return_value=_make_response(200, REAL_POINT_XML)):
+        with patch.object(
+            client, "_Client__do_get", return_value=_make_response(200, REAL_POINT_XML)
+        ):
             value = client.read_point_value("/config/station/p/")
         assert value == pytest.approx(42.0)
 
     def test_returns_none_when_read_point_fails(self, client):
-        with patch.object(client, "_Client__do_get", return_value=_make_response(404, "")):
+        with patch.object(
+            client, "_Client__do_get", return_value=_make_response(404, "")
+        ):
             value = client.read_point_value("/bad/")
         assert value is None
 
@@ -107,19 +125,22 @@ class TestReadPointValue:
 class TestParseXmlResponse:
     def test_returns_dict_and_first_key(self):
         from oBIX.client.client import Client
+
         root_dict, first_key = Client._Client__parse_xml_response(OK_XML)
         assert first_key == "obj"
         assert isinstance(root_dict, dict)
 
     def test_error_response_first_key_contains_err(self):
         from oBIX.client.client import Client
-        root_dict, first_key = Client._Client__parse_xml_response(ERR_XML)
+
+        _root_dict, first_key = Client._Client__parse_xml_response(ERR_XML)
         assert "err" in first_key
 
 
 class TestCheckXmlError:
     def test_returns_none_for_ok_response(self):
         from oBIX.client.client import Client
+
         with patch("oBIX.client.client.Logger"):
             root_dict, first_key = Client._Client__parse_xml_response(OK_XML)
             result = Client._Client__check_xml_error(root_dict, first_key, "Test")
@@ -127,6 +148,7 @@ class TestCheckXmlError:
 
     def test_returns_error_display_for_err_response(self):
         from oBIX.client.client import Client
+
         with patch("oBIX.client.client.Logger"):
             root_dict, first_key = Client._Client__parse_xml_response(ERR_XML)
             result = Client._Client__check_xml_error(root_dict, first_key, "Test")
@@ -135,30 +157,45 @@ class TestCheckXmlError:
 
 class TestOverridePoint:
     def test_returns_ok_on_success(self, client):
-        with patch.object(client, "_Client__do_post", return_value=_make_response(200, OK_XML)):
+        with patch.object(
+            client, "_Client__do_post", return_value=_make_response(200, OK_XML)
+        ):
             result = client.override_point("/config/station/p/", 25.0, DataType.real)
         assert result == "OK"
 
     def test_returns_error_msg_on_err_response(self, client):
-        with patch.object(client, "_Client__do_post", return_value=_make_response(200, ERR_XML)):
+        with patch.object(
+            client, "_Client__do_post", return_value=_make_response(200, ERR_XML)
+        ):
             result = client.override_point("/config/station/p/", 25.0, DataType.real)
         assert result == "No such object: /bad/path/"
 
     def test_returns_false_on_non_200(self, client):
-        with patch.object(client, "_Client__do_post", return_value=_make_response(500, "")):
+        with patch.object(
+            client, "_Client__do_post", return_value=_make_response(500, "")
+        ):
             result = client.override_point("/config/station/p/", 25.0, DataType.real)
         assert result is False
 
     def test_with_time_delta(self, client):
-        with patch.object(client, "_Client__do_post", return_value=_make_response(200, OK_XML)) as mock_post:
-            result = client.override_point("/config/station/p/", 25.0, DataType.real, time_delta=timedelta(seconds=60))
+        with patch.object(
+            client, "_Client__do_post", return_value=_make_response(200, OK_XML)
+        ) as mock_post:
+            result = client.override_point(
+                "/config/station/p/",
+                25.0,
+                DataType.real,
+                time_delta=timedelta(seconds=60),
+            )
         assert result == "OK"
         post_data = mock_post.call_args[0][1]
         assert "PT60S" in post_data
 
     def test_command_only_no_value(self, client):
         """Passing value=None should produce a payload without a value element."""
-        with patch.object(client, "_Client__do_post", return_value=_make_response(200, OK_XML)) as mock_post:
+        with patch.object(
+            client, "_Client__do_post", return_value=_make_response(200, OK_XML)
+        ) as mock_post:
             result = client.override_point("/config/station/p/", None, None)
         assert result == "OK"
         post_data = mock_post.call_args[0][1]
@@ -168,47 +205,69 @@ class TestOverridePoint:
 
 class TestOverridePointCommand:
     def test_returns_ok_on_success(self, client):
-        with patch.object(client, "_Client__do_post", return_value=_make_response(200, OK_XML)):
+        with patch.object(
+            client, "_Client__do_post", return_value=_make_response(200, OK_XML)
+        ):
             result = client.override_point_command("/config/station/p/", "auto")
         assert result == "OK"
 
     def test_returns_false_on_non_200(self, client):
-        with patch.object(client, "_Client__do_post", return_value=_make_response(500, "")):
+        with patch.object(
+            client, "_Client__do_post", return_value=_make_response(500, "")
+        ):
             result = client.override_point_command("/config/station/p/", "auto")
         assert result is False
 
 
 class TestSetPointValue:
     def test_set_point_value_ok(self, client):
-        with patch.object(client, "_Client__do_post", return_value=_make_response(200, OK_XML)):
+        with patch.object(
+            client, "_Client__do_post", return_value=_make_response(200, OK_XML)
+        ):
             result = client.set_point_value("/config/station/p/", 10.0, DataType.real)
         assert result == "OK"
 
     def test_set_point_auto_ok(self, client):
-        with patch.object(client, "_Client__do_post", return_value=_make_response(200, OK_XML)):
+        with patch.object(
+            client, "_Client__do_post", return_value=_make_response(200, OK_XML)
+        ):
             result = client.set_point_auto("/config/station/p/", DataType.real)
         assert result == "OK"
 
 
 class TestCreateNewWatch:
     def test_returns_watch_id(self, client):
-        with patch.object(client, "_Client__do_post", return_value=_make_response(200, WATCH_RESPONSE_XML)):
+        with patch.object(
+            client,
+            "_Client__do_post",
+            return_value=_make_response(200, WATCH_RESPONSE_XML),
+        ):
             watch_id = client.create_new_watch()
         assert watch_id == "watch1"
 
     def test_watch_id_added_to_list(self, client):
-        with patch.object(client, "_Client__do_post", return_value=_make_response(200, WATCH_RESPONSE_XML)):
+        with patch.object(
+            client,
+            "_Client__do_post",
+            return_value=_make_response(200, WATCH_RESPONSE_XML),
+        ):
             client.create_new_watch()
         assert "watch1" in client._Client__watch_id_list
 
     def test_duplicate_watch_id_not_added_twice(self, client):
-        with patch.object(client, "_Client__do_post", return_value=_make_response(200, WATCH_RESPONSE_XML)):
+        with patch.object(
+            client,
+            "_Client__do_post",
+            return_value=_make_response(200, WATCH_RESPONSE_XML),
+        ):
             client.create_new_watch()
             client.create_new_watch()
         assert client._Client__watch_id_list.count("watch1") == 1
 
     def test_returns_none_on_non_200(self, client):
-        with patch.object(client, "_Client__do_post", return_value=_make_response(500, "")):
+        with patch.object(
+            client, "_Client__do_post", return_value=_make_response(500, "")
+        ):
             result = client.create_new_watch()
         assert result is None
 
@@ -237,13 +296,17 @@ class TestStartStopWatch:
 
 # Instance isolation — __watch_id_list must not be shared
 
+
 class TestInstanceIsolation:
     def test_separate_watch_id_lists(self):
-        with patch("oBIX.client.client.BackgroundScheduler"), \
-             patch("oBIX.client.client.Logger"), \
-             patch("oBIX.client.client.urllib3"), \
-             patch("oBIX.client.client.requests"):
+        with (
+            patch("oBIX.client.client.BackgroundScheduler"),
+            patch("oBIX.client.client.Logger"),
+            patch("oBIX.client.client.urllib3"),
+            patch("oBIX.client.client.requests"),
+        ):
             from oBIX.client.client import Client
+
             c1 = Client("1.1.1.1", "u", "p")
             c2 = Client("2.2.2.2", "u", "p")
 
@@ -275,7 +338,9 @@ class TestSerializeData:
         assert 'val="hello"' in result
 
     def test_list_serialisation(self, client):
-        result = client._Client__serialize_data([1.0, 2.0], DataType.list, parameter=DataType.real)
+        result = client._Client__serialize_data(
+            [1.0, 2.0], DataType.list, parameter=DataType.real
+        )
         assert "<list" in result
         assert "</list>" in result
 

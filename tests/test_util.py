@@ -1,5 +1,7 @@
 """Tests for oBIX.common.util — Util helper methods."""
+
 import pytest
+
 from oBIX.common.data_type import DataType
 from oBIX.common.util import Util
 
@@ -119,6 +121,7 @@ class TestParsePoint:
 
     def test_returns_point_for_valid_dict(self):
         from oBIX.common.point import Point
+
         d = self._make_real_point_dict()
         result = Util.parse_point(d, "real")
         assert result is not None
@@ -177,7 +180,7 @@ class TestParsePoints:
         return {
             "@is": "obix:BooleanPoint obix:Point",
             "@val": val,
-            "@href": "/obix/config/s/{0}/".format(href_suffix),
+            "@href": f"/obix/config/s/{href_suffix}/",
             "@display": val,
             "bool": slots,
         }

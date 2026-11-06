@@ -1,15 +1,17 @@
-import traceback
-import pytz
 import json
-import requests
-from requests.packages.urllib3.exceptions import InsecureRequestWarning
+import traceback
 import xml.etree.ElementTree as xmlElement
+from datetime import datetime, timedelta
+
+import pytz
+import requests
 import urllib3
 import xmltodict
-from datetime import datetime, timedelta
-from events import Events
 from apscheduler.schedulers.background import BackgroundScheduler
+from events import Events
 from iupdatable import File, Logger
+from requests.packages.urllib3.exceptions import InsecureRequestWarning
+
 from oBIX.common import Util
 from oBIX.common.data_type import DataType
 
@@ -45,11 +47,11 @@ class Client:
         if not https:
             init_url = "http://"
         if self.__port == 80:
-            host_url = "http://{0}".format(self.__host)
+            host_url = f"http://{self.__host}"
         elif self.__port == 443:
-            host_url = "https://{0}".format(self.__host)
+            host_url = f"https://{self.__host}"
         else:
-            host_url = init_url + "{0}:{1}".format(self.__host, self.__port)
+            host_url = init_url + f"{self.__host}:{self.__port}"
         self.__host_url = host_url
         self.__enable_proxy = enable_proxy
         self.__proxy_dict = proxy_dict
@@ -108,7 +110,7 @@ class Client:
         xml_root = xmlElement.fromstring(response_text)
         xml_root_str = xmlElement.tostring(xml_root, encoding="utf-8")
         root_dict = xmltodict.parse(xml_root_str)
-        first_key = list(root_dict.keys())[0]
+        first_key = next(iter(root_dict.keys()))
         return root_dict, first_key
 
     @staticmethod
@@ -116,7 +118,7 @@ class Client:
         """Return the error display string if the response is an oBIX error, else None."""
         if "err" in first_key:
             error_msg = root_dict[first_key].get("@display", "unknown error")
-            Logger.instance().error("{0} Failed: {1}".format(context, error_msg))
+            Logger.instance().error(f"{context} Failed: {error_msg}")
             return error_msg
         return None
 
@@ -124,32 +126,32 @@ class Client:
         try:
             result = ""
             if data_type == DataType.bool:
-                result = '<bool val="{0}"/>'.format(str(bool(value)).lower())
+                result = f'<bool val="{str(bool(value)).lower()}"/>'
             elif data_type == DataType.int:
-                result = '<int val="{0}"/>'.format(int(value))
+                result = f'<int val="{int(value)}"/>'
             elif data_type == DataType.real:
-                result = '<real val="{0}"/>'.format(float(value))
+                result = f'<real val="{float(value)}"/>'
             elif data_type == DataType.str:
-                result = '<str val="{0}"/>'.format(str(value))
+                result = f'<str val="{value!s}"/>'
             elif data_type == DataType.enum:
-                result = '<enum range="{0}" val="{1}"/>'.format(parameter, str(value))
+                result = f'<enum range="{parameter}" val="{value!s}"/>'
             elif data_type == DataType.abs_time:
                 # 2005-03-09T13:30:00Z
-                result = '<abstime val="{0}"/>'.format(
+                result = '<abstime val="{}"/>'.format(
                     value.strftime("%Y-%m-%dT%H:%M:%S%Z")
                 )
             elif data_type == DataType.rel_time:
-                result = '<reltime val="{0}"/>'.format(str(value))
+                result = f'<reltime val="{value!s}"/>'
             elif data_type == DataType.href:
-                result = '<obj href="{0}">'.format(str(parameter))
+                result = f'<obj href="{parameter!s}">'
                 if isinstance(value, int):
-                    result = result + '<int  val="{0}"/>'.format(int(value))
+                    result = result + f'<int  val="{int(value)}"/>'
                 elif isinstance(value, float):
-                    result = result + '<real val="{0}"/>'.format(float(value))
+                    result = result + f'<real val="{float(value)}"/>'
                 elif isinstance(value, bool):
-                    result = result + '<bool val="{0}"/>'.format(bool(value))
+                    result = result + f'<bool val="{bool(value)}"/>'
                 else:
-                    result = result + '<obj val="{0}"/>'.format(str(value))
+                    result = result + f'<obj val="{value!s}"/>'
                 result = result + "</obj>"
             else:
                 result = ""
@@ -169,7 +171,7 @@ class Client:
                     )
                     return ""
                 type_str = Util.get_data_type_str(data_type)
-                result = '<list of="obix:{0}">\n'.format(type_str)
+                result = f'<list of="obix:{type_str}">\n'
                 for one in value:
                     element = self.__serialize_one_data(one, parameter)
                     result = result + "  " + element + "\n"
@@ -189,9 +191,9 @@ class Client:
             url_path = url_path + "/"
 
         if operation == "":
-            url = self.__host_url + "/obix{0}".format(url_path)
+            url = self.__host_url + f"/obix{url_path}"
         else:
-            url = self.__host_url + "/obix{0}{1}".format(url_path, operation)
+            url = self.__host_url + f"/obix{url_path}{operation}"
         return url
 
     def read_point(self, point_path: str):
@@ -209,7 +211,7 @@ class Client:
                     return None
                 xml_root_str = xmlElement.tostring(xml_root, encoding="utf-8")
                 point_dict = xmltodict.parse(xml_root_str)
-                first_key = list(point_dict.keys())[0]
+                first_key = next(iter(point_dict.keys()))
                 return Util.parse_point(point_dict[first_key], first_key)
             else:
                 return None
@@ -251,24 +253,26 @@ class Client:
         return self.__operate_point(point_path, slot, value, data_type, parameter)
 
     def override_point(
-        self, point_path: str, value, data_type: DataType, time_delta: timedelta = None
+        self,
+        point_path: str,
+        value,
+        data_type: DataType,
+        time_delta: timedelta | None = None,
     ):
         """Override a point value with an optional duration; pass value=None to issue a command-only override."""
         try:
             url = self.__get_url(point_path, "override")
-            post_data = dict()
-            post_data["obj"] = dict()
-            post_data["obj"]["reltime"] = dict()
+            post_data = {}
+            post_data["obj"] = {}
+            post_data["obj"]["reltime"] = {}
             post_data["obj"]["reltime"]["@name"] = "duration"
             if time_delta:
-                post_data["obj"]["reltime"]["@val"] = "PT{0}S".format(
-                    time_delta.seconds
-                )
+                post_data["obj"]["reltime"]["@val"] = f"PT{time_delta.seconds}S"
             else:
                 post_data["obj"]["reltime"]["@val"] = "PT0S"
             if value is not None and data_type is not None:
                 type_str = Util.get_data_type_str(data_type)
-                post_data["obj"][type_str] = dict()
+                post_data["obj"][type_str] = {}
                 post_data["obj"][type_str]["@name"] = "value"
                 post_data["obj"][type_str]["@val"] = str(value)
             post_data_str = xmltodict.unparse(post_data, full_document=False)
@@ -277,9 +281,7 @@ class Client:
                     "Override Point Failed: POST Data serialization failed!"
                 )
                 return False
-            Logger.instance().debug(
-                "override_point POST data: {0}".format(post_data_str)
-            )
+            Logger.instance().debug(f"override_point POST data: {post_data_str}")
             response = self.__do_post(url, post_data_str)
             if response.status_code == 200:
                 root_dict, first_key = self.__parse_xml_response(response.text)
@@ -289,9 +291,7 @@ class Client:
                 return "OK"
             else:
                 Logger.instance().error(
-                    "Override Point Failed: Response StatusCode is {0}".format(
-                        response.status_code
-                    )
+                    f"Override Point Failed: Response StatusCode is {response.status_code}"
                 )
                 return False
         except Exception as e:
@@ -301,19 +301,17 @@ class Client:
             return False
 
     def override_point_command(
-        self, point_path: str, slot: str, time_delta: timedelta = None
+        self, point_path: str, slot: str, time_delta: timedelta | None = None
     ):
         """Issue a command-only override (no value payload) to a named slot."""
         try:
             url = self.__get_url(point_path, slot)
-            post_data = dict()
-            post_data["obj"] = dict()
-            post_data["obj"]["reltime"] = dict()
+            post_data = {}
+            post_data["obj"] = {}
+            post_data["obj"]["reltime"] = {}
             post_data["obj"]["reltime"]["@name"] = "duration"
             if time_delta:
-                post_data["obj"]["reltime"]["@val"] = "PT{0}S".format(
-                    time_delta.seconds
-                )
+                post_data["obj"]["reltime"]["@val"] = f"PT{time_delta.seconds}S"
             else:
                 post_data["obj"]["reltime"]["@val"] = "PT0S"
             post_data_str = xmltodict.unparse(post_data, full_document=False)
@@ -323,7 +321,7 @@ class Client:
                 )
                 return False
             Logger.instance().debug(
-                "override_point_command POST data: {0}".format(post_data_str)
+                f"override_point_command POST data: {post_data_str}"
             )
             response = self.__do_post(url, post_data_str)
             if response.status_code == 200:
@@ -334,9 +332,7 @@ class Client:
                 return "OK"
             else:
                 Logger.instance().error(
-                    "Override Point Failed: Response StatusCode is {0}".format(
-                        response.status_code
-                    )
+                    f"Override Point Failed: Response StatusCode is {response.status_code}"
                 )
                 return False
         except Exception as e:
@@ -379,9 +375,7 @@ class Client:
                 return "OK"
             else:
                 Logger.instance().error(
-                    "Operate Point Failed: Response StatusCode is {0}".format(
-                        response.status_code
-                    )
+                    f"Operate Point Failed: Response StatusCode is {response.status_code}"
                 )
                 return False
         except Exception as e:
@@ -398,7 +392,7 @@ class Client:
         station,
         point,
         start_time: datetime,
-        end_time: datetime = None,
+        end_time: datetime | None = None,
         limit=None,
     ):
         try:
@@ -412,21 +406,15 @@ class Client:
                     "UTC", ""
                 )
             if isinstance(limit, int) and limit > 0:
-                url = "{0}/obix/histories/{1}/{2}/~historyQuery?start={3}&limit={4}".format(
-                    self.__host_url, station, point, start_time_str, limit
-                )
+                url = f"{self.__host_url}/obix/histories/{station}/{point}/~historyQuery?start={start_time_str}&limit={limit}"
             else:
-                url = (
-                    "{0}/obix/histories/{1}/{2}/~historyQuery?start={3}&end={4}".format(
-                        self.__host_url, station, point, start_time_str, end_time_str
-                    )
-                )
+                url = f"{self.__host_url}/obix/histories/{station}/{point}/~historyQuery?start={start_time_str}&end={end_time_str}"
             response = self.__do_get(url)
             if response.status_code == 200:
                 root = xmltodict.parse(response.text)
                 if "err" in list(root.keys()):
                     Logger.instance().error(
-                        "{0} {1}".format(root["err"]["@is"], root["err"]["@display"])
+                        "{} {}".format(root["err"]["@is"], root["err"]["@display"])
                     )
                     return None
                 temp_list = root["obj"]["list"]
@@ -435,7 +423,7 @@ class Client:
                 data_list = root["obj"]["list"]["obj"]
                 result = []
                 for data in data_list:
-                    one = dict()
+                    one = {}
                     for key in list(data.keys()):
                         if key == "abstime":
                             one["timeStamp"] = datetime.strptime(
@@ -444,11 +432,7 @@ class Client:
                         elif key == "real":
                             one["value"] = float(data[key]["@val"])
                         elif key == "bool":
-                            one["value"] = (
-                                True
-                                if str(data[key]["@val"]).lower() == "true"
-                                else False
-                            )
+                            one["value"] = str(data[key]["@val"]).lower() == "true"
                         elif key == "int":
                             one["value"] = int(data[key]["@val"])
                         else:
@@ -457,7 +441,7 @@ class Client:
                 return result
             else:
                 Logger.instance().error(
-                    "response status code is {0}".format(response.status_code)
+                    f"response status code is {response.status_code}"
                 )
                 return None
         except Exception as e:
@@ -468,7 +452,7 @@ class Client:
     @staticmethod
     def __format_one_dict(src, type_name: str):
         try:
-            result = dict()
+            result = {}
             name = src["@name"]
             val = src["@val"]
             if type_name == "ref":
@@ -492,27 +476,27 @@ class Client:
 
     def __format_object(self, src: object, type_name: str):
         if isinstance(src, list):
-            result = dict()
+            result = {}
             for one in src:
                 result.update(self.__format_one_dict(one, type_name))
         else:
             result = self.__format_one_dict(src, type_name)
         return result
 
-    def read_alarms(self, start_time: datetime, end_time: datetime = None, limit=None):
+    def read_alarms(
+        self, start_time: datetime, end_time: datetime | None = None, limit=None
+    ):
         try:
-            url = "{0}/obix/config/Services/AlarmService/~alarmQuery/".format(
-                self.__host_url
-            )
-            post_data = dict()
-            post_data["obj"] = dict()
+            url = f"{self.__host_url}/obix/config/Services/AlarmService/~alarmQuery/"
+            post_data = {}
+            post_data["obj"] = {}
             post_data["obj"]["@is"] = "obix:AlarmFilter"
 
             start_time_str = start_time.strftime("%Y-%m-%dT%H:%M:%S.000%Z").replace(
                 "UTC", ""
             )
             post_data["obj"]["abstime"] = []
-            post_data["obj"]["abstime"].append(dict())
+            post_data["obj"]["abstime"].append({})
             post_data["obj"]["abstime"][0]["@name"] = "start"
             post_data["obj"]["abstime"][0]["@val"] = start_time_str
             if end_time is None:
@@ -521,11 +505,11 @@ class Client:
                 end_time_str = end_time.strftime("%Y-%m-%dT%H:%M:%S.000%Z").replace(
                     "UTC", ""
                 )
-                post_data["obj"]["abstime"].append(dict())
+                post_data["obj"]["abstime"].append({})
                 post_data["obj"]["abstime"][1]["@name"] = "end"
                 post_data["obj"]["abstime"][1]["@val"] = end_time_str
             if isinstance(limit, int) and limit > 0:
-                post_data["obj"]["int"] = dict()
+                post_data["obj"]["int"] = {}
                 post_data["obj"]["int"]["@name"] = "limit"
                 post_data["obj"]["int"]["@val"] = limit
 
@@ -541,7 +525,7 @@ class Client:
                 if not isinstance(data_list, list):
                     data_list = [data_list]
                 for data in data_list:
-                    one = dict()
+                    one = {}
                     if "@href" in data:
                         one["href"] = data["@href"]
                     if "@is" in data:
@@ -560,7 +544,7 @@ class Client:
                 return result
             else:
                 Logger.instance().error(
-                    "response status code is {0}".format(response.status_code)
+                    f"response status code is {response.status_code}"
                 )
                 return None
         except Exception as e:
@@ -570,12 +554,12 @@ class Client:
 
     def create_new_watch(self):
         try:
-            url_watch_service = "{0}/obix/watchService".format(self.__host_url)
+            url_watch_service = f"{self.__host_url}/obix/watchService"
             url = url_watch_service + "/make/"
-            post_data = dict()
-            post_data["obj"] = dict()
+            post_data = {}
+            post_data["obj"] = {}
             post_data["obj"]["@href"] = "obix:WatchService"
-            post_data["obj"]["op"] = dict()
+            post_data["obj"]["op"] = {}
             post_data["obj"]["op"]["@name"] = "make"
             post_data["obj"]["op"]["@in"] = "obix:Nil"
             post_data["obj"]["op"]["@out"] = "obix:Watch"
@@ -591,7 +575,7 @@ class Client:
                 return watch_id
             else:
                 Logger.instance().error(
-                    "response status code is {0}".format(response.status_code)
+                    f"response status code is {response.status_code}"
                 )
                 return None
         except Exception as e:
@@ -617,16 +601,16 @@ class Client:
                     watch_id = self.create_new_watch()
                 else:
                     watch_id = self.__watch_id_list[0]
-            url_watch_service = "{0}/obix/watchService".format(self.__host_url)
-            url = url_watch_service + "/{0}/{1}/".format(watch_id.strip(), operation)
-            post_data = dict()
-            post_data["obj"] = dict()
+            url_watch_service = f"{self.__host_url}/obix/watchService"
+            url = url_watch_service + f"/{watch_id.strip()}/{operation}/"
+            post_data = {}
+            post_data["obj"] = {}
             post_data["obj"]["@is"] = "obix:WatchIn"
-            post_data["obj"]["list"] = dict()
+            post_data["obj"]["list"] = {}
             post_data["obj"]["list"]["@name"] = "hrefs"
             post_data["obj"]["list"]["uri"] = []
             for index, point_path in enumerate(point_path_list):
-                post_data["obj"]["list"]["uri"].append(dict())
+                post_data["obj"]["list"]["uri"].append({})
                 if point_path[-1] != "/":
                     point_path = point_path + "/"
                 if point_path[0] == "/":
@@ -650,7 +634,7 @@ class Client:
                     return root
             else:
                 Logger.instance().error(
-                    "response status code is {0}".format(response.status_code)
+                    f"response status code is {response.status_code}"
                 )
                 return None
         except Exception as e:
@@ -661,17 +645,16 @@ class Client:
     def __poll_watch_changes(self, watch_id=""):
         try:
             watch_result = self.__operate_watch_points("pollChanges", [], watch_id)
-            if "obj" in watch_result:
-                if "list" in watch_result["obj"]:
-                    result = []
-                    keys = list(dict(watch_result["obj"]["list"]).keys())
-                    keys = [key for key in keys if "@" not in str(key)]
-                    for data_type_key in keys:
-                        type_data = watch_result["obj"]["list"][data_type_key]
-                        points = Util.parse_points(type_data, data_type_key)
-                        result.extend(points)
-                    if len(result) > 0:
-                        self.watch_changed_handler.on_change(result)
+            if "obj" in watch_result and "list" in watch_result["obj"]:
+                result = []
+                keys = list(dict(watch_result["obj"]["list"]).keys())
+                keys = [key for key in keys if "@" not in str(key)]
+                for data_type_key in keys:
+                    type_data = watch_result["obj"]["list"][data_type_key]
+                    points = Util.parse_points(type_data, data_type_key)
+                    result.extend(points)
+                if len(result) > 0:
+                    self.watch_changed_handler.on_change(result)
         except Exception as e:
             Logger.instance().error(e)
             Logger.instance().error(traceback.format_exc())
@@ -680,14 +663,13 @@ class Client:
         result = []
         try:
             watch_result = self.__operate_watch_points("pollRefresh", [], watch_id)
-            if "obj" in watch_result:
-                if "list" in watch_result["obj"]:
-                    keys = list(dict(watch_result["obj"]["list"]).keys())
-                    keys = [key for key in keys if "@" not in str(key)]
-                    for data_type_key in keys:
-                        type_data = watch_result["obj"]["list"][data_type_key]
-                        points = Util.parse_points(type_data, data_type_key)
-                        result.extend(points)
+            if "obj" in watch_result and "list" in watch_result["obj"]:
+                keys = list(dict(watch_result["obj"]["list"]).keys())
+                keys = [key for key in keys if "@" not in str(key)]
+                for data_type_key in keys:
+                    type_data = watch_result["obj"]["list"][data_type_key]
+                    points = Util.parse_points(type_data, data_type_key)
+                    result.extend(points)
             return result
         except Exception as e:
             Logger.instance().error(e)

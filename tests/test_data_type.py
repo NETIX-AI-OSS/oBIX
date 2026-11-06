@@ -35,5 +35,17 @@ class TestDataTypeValues:
 
     def test_all_members_present(self):
         names = {m.name for m in DataType}
-        expected = {"bool", "int", "real", "str", "enum", "abs_time", "rel_time", "date", "time", "list", "href"}
+        expected = {
+            "bool",
+            "int",
+            "real",
+            "str",
+            "enum",
+            "abs_time",
+            "rel_time",
+            "date",
+            "time",
+            "list",
+            "href",
+        }
         assert expected == names
