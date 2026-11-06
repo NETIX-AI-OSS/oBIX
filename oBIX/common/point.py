@@ -1,8 +1,9 @@
-from oBIX.common.data_type import DataType
 import json
 
+from oBIX.common.data_type import DataType
 
-class Point(object):
+
+class Point:
     name: str
     val: str
     status: str

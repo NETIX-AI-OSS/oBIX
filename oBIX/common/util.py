@@ -1,7 +1,8 @@
 import traceback
 
-from oBIX.common import Point, DataType
 from iupdatable import Logger
+
+from oBIX.common import DataType, Point
 
 # Single source-of-truth mapping: string tag -> DataType
 _STR_TO_DATA_TYPE: dict = {
@@ -18,7 +19,7 @@ _STR_TO_DATA_TYPE: dict = {
 _DATA_TYPE_TO_STR: dict = {v: k for k, v in _STR_TO_DATA_TYPE.items()}
 
 
-class Util(object):
+class Util:
     @staticmethod
     def parse_data_type(data_type_str: str):
         return _STR_TO_DATA_TYPE.get(data_type_str.lower(), DataType.str)
@@ -32,10 +33,7 @@ class Util(object):
         if data_type == DataType.real:
             return float(str_value)
         elif data_type == DataType.bool:
-            if str_value.strip().lower() == "true":
-                return True
-            else:
-                return False
+            return str_value.strip().lower() == "true"
         elif data_type == DataType.int:
             return int(str_value)
         else:

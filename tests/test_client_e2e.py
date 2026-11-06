@@ -4,13 +4,12 @@ from base64 import b64encode
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from threading import Thread
 from unittest.mock import MagicMock, patch
-import xml.etree.ElementTree as ElementTree
+from xml.etree import ElementTree
 
 import pytest
 
 from oBIX import Client
 from oBIX.common.data_type import DataType
-
 
 POINT_XML = """<real name="NumericWritable" href="/obix/config/station/p/" is="obix:NumericPoint obix:Point"
         val="42.0" display="42.0 C">
@@ -40,7 +39,9 @@ class ObixHandler(BaseHTTPRequestHandler):
             }
         )
 
-    def _respond(self, status_code: int, body: str, content_type: str = "application/xml") -> None:
+    def _respond(
+        self, status_code: int, body: str, content_type: str = "application/xml"
+    ) -> None:
         body_bytes = body.encode("utf-8")
         self.send_response(status_code)
         self.send_header("Content-Type", content_type)
@@ -94,7 +95,9 @@ def obix_server() -> ThreadingHTTPServer:
     """Run the local oBIX protocol fixture on an ephemeral port."""
     server = ThreadingHTTPServer(("127.0.0.1", 0), ObixHandler)
     server.daemon_threads = True
-    server.expected_authorization = "Basic " + b64encode(b"admin:password").decode("ascii")
+    server.expected_authorization = "Basic " + b64encode(b"admin:password").decode(
+        "ascii"
+    )
     server.requests = []
     thread = Thread(target=server.serve_forever, daemon=True)
     thread.start()
@@ -121,7 +124,9 @@ def e2e_client(obix_server: ThreadingHTTPServer) -> Client:
         yield client
 
 
-def test_reads_point_over_http(e2e_client: Client, obix_server: ThreadingHTTPServer) -> None:
+def test_reads_point_over_http(
+    e2e_client: Client, obix_server: ThreadingHTTPServer
+) -> None:
     point = e2e_client.read_point("/config/station/p/")
     value = e2e_client.read_point_value("/config/station/p/")
 

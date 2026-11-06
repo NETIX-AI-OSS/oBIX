@@ -19,7 +19,7 @@ from oBIX.common import Point, DataType
 from oBIX import Client
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     # ip, userName, password
     # options:
     #   port: the ip port to access
@@ -31,82 +31,81 @@ if __name__ == '__main__':
 
     # read a point value
     point_value = client.read_point_value(point_path)
-
 ```
 ## 2. Basic examples
 ### 2.1 Read point
 
 ```python
+# set a NumericWritable Point in Niagara 4
+point_path = "/config/AHU/temp1/"
 
-    # set a NumericWritable Point in Niagara 4
-    point_path = "/config/AHU/temp1/"
+# read a point value
+point_value = client.read_point_value(point_path)
+print("point value is {0}".format(point_value))
 
-    # read a point value
-    point_value = client.read_point_value(point_path)
-    print("point value is {0}".format(point_value))
+# read a point object
+# you can access all properties in this point
+# E.g: name, val, status, display, href, in1, in2 ... in16, fallback, out
+point_obj = client.read_point(point_path)
+print("name is {0}".format(point_obj.name))
+print("fallback is {0}".format(point_obj.fallback))
+print("in10 is {0}".format(point_obj.in10))
 
-    # read a point object
-    # you can access all properties in this point
-    # E.g: name, val, status, display, href, in1, in2 ... in16, fallback, out
-    point_obj = client.read_point(point_path)
-    print("name is {0}".format(point_obj.name))
-    print("fallback is {0}".format(point_obj.fallback))
-    print("in10 is {0}".format(point_obj.in10))
-    
-    # you can also use the following function to quickly access
-    point_in10_value = client.read_point_slot(point_path, "in10")
-    print("in10 is {0}".format(point_in10_value))
-    
+# you can also use the following function to quickly access
+point_in10_value = client.read_point_slot(point_path, "in10")
+print("in10 is {0}".format(point_in10_value))
 ```
 
 ### 2.2 Write point
 
 ```python
-    
-    # set a NumericWritable Point in Niagara 4
-    point_path = "/config/AHU/temp1/"
+# set a NumericWritable Point in Niagara 4
+point_path = "/config/AHU/temp1/"
 
-    # set point value
-    client.write_point(point_path, 15.2, DataType.real)
-    # set point auto
-    client.set_point_auto(point_path, DataType.real)
-    # override a point
-    client.override_point(point_path, 14, DataType.real)
-    # emergency override a point
-    client.emergency_override_point(point_path, 15, DataType.real)
-    # set a point emergency auto
-    client.set_point_emergency_auto(point_path, DataType.real)
-
+# set point value
+client.write_point(point_path, 15.2, DataType.real)
+# set point auto
+client.set_point_auto(point_path, DataType.real)
+# override a point
+client.override_point(point_path, 14, DataType.real)
+# emergency override a point
+client.emergency_override_point(point_path, 15, DataType.real)
+# set a point emergency auto
+client.set_point_emergency_auto(point_path, DataType.real)
 ```
 
 ## 3. Advanced Features
 ### 3.1 Read history
 ```Python
-    # start time
-    start_time = datetime.now(tz=timezone(timedelta(hours=8))) - timedelta(minutes=10)
-    # end time
-    end_time = datetime.now(tz=timezone(timedelta(hours=8)))
+# start time
+start_time = datetime.now(tz=timezone(timedelta(hours=8))) - timedelta(minutes=10)
+# end time
+end_time = datetime.now(tz=timezone(timedelta(hours=8)))
 
-    # read history data from start_time to end_time
-    history = client.read_history("Station01", "OutDoorTemp", start_time, end_time)
+# read history data from start_time to end_time
+history = client.read_history("Station01", "OutDoorTemp", start_time, end_time)
 
-    # read history data from start_time with a limit num
-    limit_num = 1
-    history = client.read_history("Station01", "OutDoorTemp", start_time=start_time, limit=limit_num)
+# read history data from start_time with a limit num
+limit_num = 1
+history = client.read_history(
+    "Station01", "OutDoorTemp", start_time=start_time, limit=limit_num
+)
 ```
 ### 3.2 Read alarms
 ```Python
-    # start time
-    start_time = datetime.now(tz=timezone(timedelta(hours=8))) - timedelta(minutes=10)
-    # end time
-    end_time = datetime.now(tz=timezone(timedelta(hours=8)))
+# start time
+start_time = datetime.now(tz=timezone(timedelta(hours=8))) - timedelta(minutes=10)
+# end time
+end_time = datetime.now(tz=timezone(timedelta(hours=8)))
 
-    # read alarm data from start_time to end_time
-    history = client.read_alarms("Station01", "OutDoorTemp", start_time, end_time)
+# read alarm data from start_time to end_time
+history = client.read_alarms("Station01", "OutDoorTemp", start_time, end_time)
 
-    # read alarm data from start_time with a limit num
-    limit_num = 1
-    history = client.read_alarms("Station01", "OutDoorTemp", start_time=start_time, limit=limit_num)
+# read alarm data from start_time with a limit num
+limit_num = 1
+history = client.read_alarms(
+    "Station01", "OutDoorTemp", start_time=start_time, limit=limit_num
+)
 ```
 ### 3.3 Monitoring point changes
 ```python
@@ -130,7 +129,7 @@ def on_watch_changed(points: [Point]):
         print(f"on_watch_changed: {val}")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     # ip, userName, password
     # options:
     #   port: the ip port to access
@@ -144,12 +143,10 @@ if __name__ == '__main__':
     client.start_watch()
     while True:
         i = 0
-
 ```
 ### 3.4 Export all points
 
 ```python
-
 # export all points info
 export_result = client.export_points()
 
@@ -161,7 +158,9 @@ export_result = client.export_points()
 #     1: JSON format, pure point list with properties, ignoring directory structure
 #     2: string list, pure point url list
 
-export_result = client.export_points(folder_path="/config/AHU/", export_file_name="output.json", export_type=1)
+export_result = client.export_points(
+    folder_path="/config/AHU/", export_file_name="output.json", export_type=1
+)
 ```
 
 
