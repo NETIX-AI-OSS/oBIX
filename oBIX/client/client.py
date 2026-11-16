@@ -56,7 +56,7 @@ class Client:
         self.__enable_proxy = enable_proxy
         self.__proxy_dict = proxy_dict
 
-        # Per-instance watch state — must not be shared across instances
+        # Per-instance watch state: must not be shared across instances
         self.__watch_id_list = []
         # Create a scheduler to poll watch changes from server
         self.__scheduler = BackgroundScheduler()
@@ -77,7 +77,7 @@ class Client:
             if self.__scheduler.running:
                 self.__scheduler.shutdown()
 
-    # HTTP helpers — single place for proxy/non-proxy dispatch
+    # HTTP helpers: single place for proxy/non-proxy dispatch
 
     def __do_get(self, url: str):
         if self.__enable_proxy:
@@ -102,7 +102,7 @@ class Client:
             url, auth=(self.__user_name, self.__password), data=data, verify=False
         )
 
-    # XML parsing helpers — single place for the repeated parse pattern
+    # XML parsing helpers: single place for the repeated parse pattern
 
     @staticmethod
     def __parse_xml_response(response_text: str) -> tuple:

@@ -1,4 +1,4 @@
-"""Tests for oBIX.common.data_type — enum stability."""
+"""Tests for oBIX.common.data_type, enum stability."""
 
 from oBIX.common.data_type import DataType
 
