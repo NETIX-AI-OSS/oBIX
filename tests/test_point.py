@@ -1,4 +1,4 @@
-"""Tests for oBIX.common.point — Point model and serialisation."""
+"""Tests for oBIX.common.point, Point model and serialisation."""
 
 import json
 

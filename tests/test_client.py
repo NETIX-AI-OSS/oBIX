@@ -1,4 +1,4 @@
-"""Tests for oBIX.client.client — Client public methods (mocked HTTP)."""
+"""Tests for oBIX.client.client, Client public methods (mocked HTTP)."""
 
 from datetime import timedelta
 from unittest.mock import MagicMock, patch
@@ -294,7 +294,7 @@ class TestStartStopWatch:
         client._Client__scheduler.shutdown.assert_not_called()
 
 
-# Instance isolation — __watch_id_list must not be shared
+# Instance isolation: __watch_id_list must not be shared
 
 
 class TestInstanceIsolation:

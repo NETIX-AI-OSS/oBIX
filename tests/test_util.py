@@ -1,4 +1,4 @@
-"""Tests for oBIX.common.util — Util helper methods."""
+"""Tests for oBIX.common.util, Util helper methods."""
 
 import pytest
 
@@ -98,7 +98,7 @@ class TestConvertToType:
         assert Util.convert_to_type("hello", DataType.str) == "hello"
 
     def test_enum_passthrough(self):
-        # enum falls through to the else branch — returns the string as-is
+        # enum falls through to the else branch: returns the string as-is
         assert Util.convert_to_type("active", DataType.enum) == "active"
 
 
@@ -140,7 +140,7 @@ class TestParsePoint:
     def test_null_display_slot_is_none(self):
         d = self._make_real_point_dict()
         result = Util.parse_point(d, "real")
-        # in1 has {null} display — should be None
+        # in1 has {null} display: should be None
         assert result.in1 is None
 
     def test_name_derived_from_href(self):
@@ -153,7 +153,7 @@ class TestParsePoint:
         assert Util.parse_point(d, "real") is None
 
     def test_returns_none_when_not_obix_point(self):
-        # @is does not contain "obix:Point" — should return None
+        # @is does not contain "obix:Point": should return None
         d = {"@is": "obix:Folder", "@val": "", "@href": "/x/", "@display": ""}
         assert Util.parse_point(d, "real") is None
 
@@ -201,7 +201,7 @@ class TestParsePoints:
     def test_invalid_items_skipped(self):
         dicts = [
             self._make_bool_point_dict("good"),
-            {"@is": "obix:Folder"},  # invalid — will return None from parse_point
+            {"@is": "obix:Folder"},  # invalid, will return None from parse_point
         ]
         result = Util.parse_points(dicts, "bool")
         assert len(result) == 1
